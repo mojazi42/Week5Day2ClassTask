@@ -20,4 +20,4 @@ An Android Jetpack Compose app that displays the user's current location and sho
    ```bash
    https://github.com/mojazi42/Week5Day2ClassTask.git
    ```
-   ![Screenshot_20250408-044906_Currnet Location](https://github.com/user-attachments/assets/73490461-8621-40e2-98de-217ed96ff063)
+

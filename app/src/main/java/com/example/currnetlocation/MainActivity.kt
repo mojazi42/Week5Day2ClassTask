@@ -1,252 +1,150 @@
 package com.example.currnetlocation
-
+import android.Manifest
 import android.annotation.SuppressLint
-import android.content.Context
-import android.location.Location
+import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
-import androidx.core.content.PermissionChecker
-import com.google.accompanist.systemuicontroller.rememberSystemUiController
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.app.ActivityCompat
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
-import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.GoogleMap
+import com.google.android.gms.maps.MapView
+import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.MapStyleOptions
-import com.google.maps.android.compose.*
+import com.google.android.gms.maps.model.MarkerOptions
+import com.google.maps.android.ktx.awaitMap
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private lateinit var fusedLocationClient: FusedLocationProviderClient
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+
         setContent {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    FullscreenImage(R.drawable.ic_launcher_foreground)
-                    BottomCardWithMap()
-                    LocationCardWithRefresh()
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun BottomCardWithMap() {
-    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
-    val offsetY = with(LocalDensity.current) { (screenHeight / 2.8f).toPx().toInt() }
-    val context = LocalContext.current
-
-    var location by remember { mutableStateOf<Location?>(null) }
-
-    val fusedLocationClient = remember {
-        LocationServices.getFusedLocationProviderClient(context)
-    }
-
-    LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(
-                context,
-                android.Manifest.permission.ACCESS_FINE_LOCATION
-            ) == PermissionChecker.PERMISSION_GRANTED
-        ) {
-            fusedLocationClient.lastLocation.addOnSuccessListener {
-                location = it
-            }
-        }
-    }
-
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(
-            location?.let { LatLng(it.latitude, it.longitude) } ?: LatLng(0.0, 0.0),
-            15f
-        )
-    }
-
-    val mapStyleOptions = remember {
-        try {
-            MapStyleOptions.loadRawResourceStyle(context, R.raw.map_style)
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    val mapProperties = MapProperties(mapStyleOptions = mapStyleOptions)
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        Card(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .offset { IntOffset(x = 0, y = offsetY) }
-                .fillMaxSize(),
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-            elevation = CardDefaults.cardElevation(8.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White)
-        ) {
-            if (location != null) {
-                GoogleMap(
-                    modifier = Modifier.fillMaxSize(),
-                    cameraPositionState = cameraPositionState,
-                    properties = mapProperties
-                ) {
-                    Marker(
-                        state = MarkerState(position = LatLng(location!!.latitude, location!!.longitude)),
-                        title = "You are here"
-                    )
-                }
-            } else {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Loading map...", fontSize = 16.sp, color = Color.Gray)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun LocationCardWithRefresh() {
-    val context = LocalContext.current
-    var latitude by remember { mutableStateOf<Double?>(null) }
-    var longitude by remember { mutableStateOf<Double?>(null) }
-    var errorMessage by remember { mutableStateOf<String?>(null) }
-    var isLoading by remember { mutableStateOf(true) }
-
-    val fusedLocationClient = remember {
-        LocationServices.getFusedLocationProviderClient(context)
-    }
-
-    val locationPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            fetchLatLng(context, fusedLocationClient) { lat, lon, error ->
-                latitude = lat
-                longitude = lon
-                errorMessage = error
-                isLoading = false
-            }
-        } else {
-            errorMessage = "Location permission denied"
-            isLoading = false
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        when (ContextCompat.checkSelfPermission(
-            context,
-            android.Manifest.permission.ACCESS_FINE_LOCATION
-        )) {
-            PermissionChecker.PERMISSION_GRANTED -> {
-                fetchLatLng(context, fusedLocationClient) { lat, lon, error ->
-                    latitude = lat
-                    longitude = lon
-                    errorMessage = error
-                    isLoading = false
-                }
-            }
-            else -> {
-                isLoading = true
-                locationPermissionLauncher.launch(android.Manifest.permission.ACCESS_FINE_LOCATION)
-            }
-        }
-    }
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(top = 64.dp, start = 16.dp, end = 16.dp),
-        contentAlignment = Alignment.TopCenter
-    ) {
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(8.dp),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .padding(20.dp)
-                    .fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                if (isLoading) {
-                    Text("Fetching location...", color = Color.Gray)
-                } else if (errorMessage != null) {
-                    Text("Error: $errorMessage", color = Color.Red)
-                } else {
-                    Text("Latitude: $latitude", fontSize = 18.sp, color = Color.Black)
-                    Text("Longitude: $longitude", fontSize = 18.sp, color = Color.Black)
-                }
-                Spacer(modifier = Modifier.height(12.dp))
-                Button(onClick = {
-                    isLoading = true
-                    fetchLatLng(context, fusedLocationClient) { lat, lon, error ->
-                        latitude = lat
-                        longitude = lon
-                        errorMessage = error
-                        isLoading = false
-                    }
-                }) {
-                    Text("Refresh")
-                }
+            MaterialTheme {
+                LocationScreen(fusedLocationClient)
             }
         }
     }
 }
 
 @SuppressLint("MissingPermission")
-private fun fetchLatLng(
-    context: Context,
-    fusedLocationClient: FusedLocationProviderClient,
-    onResult: (Double?, Double?, String?) -> Unit
-) {
-    fusedLocationClient.lastLocation
-        .addOnSuccessListener { location ->
-            location?.let {
-                onResult(it.latitude, it.longitude, null)
-            } ?: onResult(null, null, "Location not found")
+@OptIn(ExperimentalPermissionsApi::class)
+@Composable
+fun LocationScreen(fusedLocationClient: FusedLocationProviderClient) {
+    val context = LocalContext.current
+    val locationPermission = rememberPermissionState(Manifest.permission.ACCESS_FINE_LOCATION)
+    var location by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+    val coroutineScope = rememberCoroutineScope()
+
+    fun fetchLocation() {
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            errorMessage = "Permission not granted."
+            return
         }
-        .addOnFailureListener {
-            onResult(null, null, "Error: ${it.message}")
+        fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
+            if (loc != null) {
+                location = Pair(loc.latitude, loc.longitude)
+                errorMessage = null
+            } else {
+                errorMessage = "Failed to get location."
+            }
+        }.addOnFailureListener {
+            errorMessage = "Error: ${it.message}"
         }
+    }
+
+    LaunchedEffect(Unit) {
+        if (locationPermission.status.isGranted) {
+            fetchLocation()
+        } else {
+            locationPermission.launchPermissionRequest()
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.Top,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            elevation = CardDefaults.cardElevation(8.dp)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text("Current Location", style = MaterialTheme.typography.titleLarge)
+                Spacer(modifier = Modifier.height(8.dp))
+                location?.let {
+                    Text("Latitude: ${it.first}")
+                    Text("Longitude: ${it.second}")
+                } ?: Text("Location not available")
+                errorMessage?.let {
+                    Text("Error: $it", color = MaterialTheme.colorScheme.error)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Button(onClick = { fetchLocation() }) {
+                    Text("Refresh Location")
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        GoogleMapView(location)
+    }
 }
 
 @Composable
-fun FullscreenImage(imageRes: Int) {
-    val systemUiController = rememberSystemUiController()
-    systemUiController.isSystemBarsVisible = false
+fun GoogleMapView(location: Pair<Double, Double>?) {
+    val mapView = rememberMapViewWithLifecycle()
+    AndroidView({ mapView }) { mapView ->
+        mapView.getMapAsync { googleMap ->
+            val style = MapStyleOptions.loadRawResourceStyle(
+                mapView.context,
+                R.raw.map_style // You should add a JSON file named "map_style_night.json" under res/raw/
+            )
+            googleMap.setMapStyle(style)
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Image(
-            painter = painterResource(id = imageRes),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-        )
+            if (location != null) {
+                val latLng = LatLng(location.first, location.second)
+                googleMap.clear()
+                googleMap.addMarker(MarkerOptions().position(latLng).title("You are here"))
+                googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15f))
+            }
+        }
     }
+}
+
+@Composable
+fun rememberMapViewWithLifecycle(): MapView {
+    val context = LocalContext.current
+    val mapView = remember { MapView(context) }
+
+    DisposableEffect(Unit) {
+        mapView.onCreate(Bundle())
+        mapView.onStart()
+        mapView.onResume()
+        onDispose {
+            mapView.onPause()
+            mapView.onStop()
+            mapView.onDestroy()
+        }
+    }
+    return mapView
 }
